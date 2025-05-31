@@ -9,7 +9,10 @@ import {
   CreditCard,
   Shield,
   Save,
-  Camera
+  Camera,
+  X,
+  Check,
+  Loader2
 } from 'lucide-react';
 import DashboardLayout from '../components/dashboard/DashboardLayout';
 import { useAuth } from '../contexts/AuthContext';
@@ -30,6 +33,7 @@ interface UserProfile {
   postalCode?: string;
   about?: string;
   photoURL?: string;
+  twoFactorEnabled?: boolean;
   notificationSettings?: {
     email: boolean;
     push: boolean;
@@ -46,6 +50,8 @@ const Profile = () => {
   const [isWithdrawLoading, setIsWithdrawLoading] = useState(false);
   const [avatarFile, setAvatarFile] = useState<File | null>(null);
   const [avatarPreview, setAvatarPreview] = useState<string | null>(null);
+  const [is2FAModalOpen, setIs2FAModalOpen] = useState(false);
+  const [is2FALoading, setIs2FALoading] = useState(false);
 
   useEffect(() => {
     if (!user) return;
@@ -164,6 +170,33 @@ const Profile = () => {
         setAvatarPreview(reader.result as string);
       };
       reader.readAsDataURL(file);
+    }
+  };
+
+  const toggle2FA = async () => {
+    if (!user) return;
+    
+    setIs2FALoading(true);
+    try {
+      const newStatus = !profile?.twoFactorEnabled;
+      
+      await updateDoc(doc(db, 'users', user.uid), {
+        twoFactorEnabled: newStatus,
+        updatedAt: new Date().toISOString(),
+      });
+      
+      setProfile({
+        ...profile!,
+        twoFactorEnabled: newStatus,
+      });
+      
+      toast.success(`Two-factor authentication ${newStatus ? 'enabled' : 'disabled'} successfully`);
+      setIs2FAModalOpen(false);
+    } catch (error) {
+      console.error('Error toggling 2FA:', error);
+      toast.error('Failed to update two-factor authentication');
+    } finally {
+      setIs2FALoading(false);
     }
   };
 
@@ -576,17 +609,7 @@ const Profile = () => {
                         type="button"
                         className="px-4 py-2 bg-primary-600 text-white rounded-md hover:bg-primary-700 transition-colors"
                       >
-                        {isWithdrawLoading ? (
-                          <span className="flex items-center">
-                            <svg className="animate-spin -ml-1 mr-2 h-4 w-4 text-white\" xmlns="http://www.w3.org/2000/svg\" fill="none\" viewBox="0 0 24 24">
-                              <circle className="opacity-25\" cx="12\" cy="12\" r="10\" stroke="currentColor\" strokeWidth="4"></circle>
-                              <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
-                            </svg>
-                            Processing...
-                          </span>
-                        ) : (
-                          'Update Password'
-                        )}
+                        Update Password
                       </button>
                     </div>
                   </div>
@@ -607,9 +630,14 @@ const Profile = () => {
                         </div>
                         <button
                           type="button"
-                          className="px-3 py-1.5 bg-white border border-gray-300 text-sm text-gray-700 rounded-md hover:bg-gray-50 transition-colors"
+                          onClick={() => setIs2FAModalOpen(true)}
+                          className={`px-3 py-1.5 ${
+                            profile?.twoFactorEnabled
+                              ? 'bg-success-50 text-success-700 hover:bg-success-100'
+                              : 'bg-white border border-gray-300 text-gray-700 hover:bg-gray-50'
+                          } rounded-md transition-colors`}
                         >
-                          Enable
+                          {profile?.twoFactorEnabled ? 'Enabled' : 'Enable'}
                         </button>
                       </div>
                       
@@ -625,7 +653,7 @@ const Profile = () => {
                         </div>
                         <button
                           type="button"
-                          className="px-3 py-1.5 bg-white border border-gray-300 text-sm text-gray-700 rounded-md hover:bg-gray-50 transition-colors"
+                          className="px-3 py-1.5 bg-white border border-gray-300 text-gray-700 rounded-md hover:bg-gray-50 transition-colors"
                         >
                           Manage
                         </button>
@@ -651,10 +679,7 @@ const Profile = () => {
               >
                 {isSaving ? (
                   <>
-                    <svg className="animate-spin -ml-1 mr-2 h-4 w-4 text-white\" xmlns="http://www.w3.org/2000/svg\" fill="none\" viewBox="0 0 24 24">
-                      <circle className="opacity-25\" cx="12\" cy="12\" r="10\" stroke="currentColor\" strokeWidth="4"></circle>
-                      <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
-                    </svg>
+                    <Loader2 className="animate-spin h-4 w-4 mr-2" />
                     Saving Changes...
                   </>
                 ) : (
@@ -668,6 +693,65 @@ const Profile = () => {
           </form>
         </div>
       </div>
+
+      {/* 2FA Modal */}
+      {is2FAModalOpen && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+          <div className="bg-white rounded-lg p-6 max-w-md w-full mx-4">
+            <div className="flex justify-between items-start mb-4">
+              <div className="flex items-center">
+                <Shield className="h-6 w-6 text-primary-600 mr-2" />
+                <h3 className="text-lg font-medium text-gray-900">
+                  Two-Factor Authentication
+                </h3>
+              </div>
+              <button
+                onClick={() => setIs2FAModalOpen(false)}
+                className="text-gray-400 hover:text-gray-500"
+              >
+                <X className="h-5 w-5" />
+              </button>
+            </div>
+
+            <div className="mb-6">
+              <p className="text-sm text-gray-500">
+                {profile?.twoFactorEnabled
+                  ? 'Disable two-factor authentication? This will make your account less secure.'
+                  : 'Enable two-factor authentication to add an extra layer of security to your account. You will need to enter a code from your authenticator app when signing in.'}
+              </p>
+            </div>
+
+            <div className="flex justify-end space-x-3">
+              <button
+                onClick={() => setIs2FAModalOpen(false)}
+                className="px-4 py-2 border border-gray-300 rounded-md text-gray-700 hover:bg-gray-50 transition-colors"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={toggle2FA}
+                disabled={is2FALoading}
+                className={`px-4 py-2 rounded-md text-white transition-colors flex items-center ${
+                  profile?.twoFactorEnabled
+                    ? 'bg-error-600 hover:bg-error-700'
+                    : 'bg-primary-600 hover:bg-primary-700'
+                }`}
+              >
+                {is2FALoading ? (
+                  <>
+                    <Loader2 className="animate-spin h-4 w-4 mr-2" />
+                    Processing...
+                  </>
+                ) : profile?.twoFactorEnabled ? (
+                  'Disable 2FA'
+                ) : (
+                  'Enable 2FA'
+                )}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </DashboardLayout>
   );
 };
