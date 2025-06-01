@@ -91,7 +91,9 @@ function App() {
           
           <Route path="transactions" element={
             <ProtectedRoute>
-              <Transactions />
+              <RoleBasedRoute allowedRoles={['admin', 'seller', 'buyer']}>
+                <Transactions />
+              </RoleBasedRoute>
             </ProtectedRoute>
           } />
           
