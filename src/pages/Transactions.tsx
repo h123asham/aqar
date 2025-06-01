@@ -10,11 +10,15 @@ import {
   DollarSign,
   TrendingUp,
   TrendingDown,
+  Check,
+  X,
+  AlertTriangle,
+  Loader2
 } from 'lucide-react';
 import DashboardLayout from '../components/dashboard/DashboardLayout';
 import StatCard from '../components/dashboard/StatCard';
 import ChartCard from '../components/dashboard/ChartCard';
-import { collection, query, where, orderBy, getDocs } from 'firebase/firestore';
+import { collection, query, where, orderBy, getDocs, doc, updateDoc } from 'firebase/firestore';
 import { db } from '../firebase/config';
 import { useAuth } from '../contexts/AuthContext';
 import { toast } from 'react-toastify';
@@ -41,6 +45,10 @@ const Transactions = () => {
   const [filter, setFilter] = useState<string>('all');
   const [dateRange, setDateRange] = useState<'week' | 'month' | 'year'>('month');
   const [searchQuery, setSearchQuery] = useState('');
+  const [updatingStatus, setUpdatingStatus] = useState<string | null>(null);
+  const [showStatusModal, setShowStatusModal] = useState(false);
+  const [selectedTransaction, setSelectedTransaction] = useState<Transaction | null>(null);
+  const [newStatus, setNewStatus] = useState<'completed' | 'pending' | 'failed'>('completed');
 
   // Stats for different roles
   const [stats, setStats] = useState({
@@ -108,6 +116,50 @@ const Transactions = () => {
 
     fetchTransactions();
   }, [user]);
+
+  const handleUpdateStatus = async (transaction: Transaction, status: 'completed' | 'pending' | 'failed') => {
+    if (!user || user.role !== 'admin') return;
+
+    setUpdatingStatus(transaction.id);
+    try {
+      // Update transaction status
+      await updateDoc(doc(db, 'transactions', transaction.id), {
+        status,
+        updatedAt: new Date().toISOString(),
+      });
+
+      // If it's a withdrawal and status is completed, update user's wallet balance
+      if (transaction.type === 'withdrawal' && status === 'completed') {
+        const userRef = doc(db, 'users', transaction.buyerId || transaction.sellerId || '');
+        const userDoc = await getDoc(userRef);
+        if (userDoc.exists()) {
+          const currentBalance = userDoc.data().balance || 0;
+          await updateDoc(userRef, {
+            balance: currentBalance - transaction.amount,
+          });
+        }
+      }
+
+      // Update local state
+      setTransactions(transactions.map(tx =>
+        tx.id === transaction.id ? { ...tx, status } : tx
+      ));
+
+      toast.success(`Transaction status updated to ${status}`);
+    } catch (error) {
+      console.error('Error updating transaction status:', error);
+      toast.error('Failed to update transaction status');
+    } finally {
+      setUpdatingStatus(null);
+      setShowStatusModal(false);
+    }
+  };
+
+  const openStatusModal = (transaction: Transaction) => {
+    setSelectedTransaction(transaction);
+    setNewStatus(transaction.status);
+    setShowStatusModal(true);
+  };
 
   const getStatusColor = (status: string) => {
     switch (status) {
@@ -302,6 +354,11 @@ const Transactions = () => {
                     <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                       Date
                     </th>
+                    {user?.role === 'admin' && (
+                      <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                        Actions
+                      </th>
+                    )}
                   </tr>
                 </thead>
                 <tbody className="bg-white divide-y divide-gray-200">
@@ -365,6 +422,21 @@ const Transactions = () => {
                           day: 'numeric',
                         })}
                       </td>
+                      {user?.role === 'admin' && (
+                        <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+                          <button
+                            onClick={() => openStatusModal(transaction)}
+                            className="text-primary-600 hover:text-primary-900"
+                            disabled={updatingStatus === transaction.id}
+                          >
+                            {updatingStatus === transaction.id ? (
+                              <Loader2 className="h-5 w-5 animate-spin" />
+                            ) : (
+                              'Update Status'
+                            )}
+                          </button>
+                        </td>
+                      )}
                     </tr>
                   ))}
                 </tbody>
@@ -373,6 +445,68 @@ const Transactions = () => {
           )}
         </div>
       </div>
+
+      {/* Status Update Modal */}
+      {showStatusModal && selectedTransaction && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+          <div className="bg-white rounded-lg p-6 max-w-md w-full mx-4">
+            <h3 className="text-lg font-medium text-gray-900 mb-4">
+              Update Transaction Status
+            </h3>
+            
+            <div className="space-y-4">
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">
+                  Current Status
+                </label>
+                <div className={`inline-flex px-2 py-1 rounded-full text-sm font-semibold ${getStatusColor(selectedTransaction.status)}`}>
+                  {selectedTransaction.status}
+                </div>
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">
+                  New Status
+                </label>
+                <select
+                  value={newStatus}
+                  onChange={(e) => setNewStatus(e.target.value as 'completed' | 'pending' | 'failed')}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-primary-500 focus:border-primary-500"
+                >
+                  <option value="completed">Completed</option>
+                  <option value="pending">Pending</option>
+                  <option value="failed">Failed</option>
+                </select>
+              </div>
+
+              <div className="pt-4">
+                <div className="flex justify-end space-x-3">
+                  <button
+                    onClick={() => setShowStatusModal(false)}
+                    className="px-4 py-2 border border-gray-300 rounded-md text-gray-700 hover:bg-gray-50 transition-colors"
+                  >
+                    Cancel
+                  </button>
+                  <button
+                    onClick={() => handleUpdateStatus(selectedTransaction, newStatus)}
+                    disabled={updatingStatus === selectedTransaction.id}
+                    className="px-4 py-2 bg-primary-600 text-white rounded-md hover:bg-primary-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center"
+                  >
+                    {updatingStatus === selectedTransaction.id ? (
+                      <>
+                        <Loader2 className="animate-spin h-4 w-4 mr-2" />
+                        Updating...
+                      </>
+                    ) : (
+                      'Update Status'
+                    )}
+                  </button>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
     </DashboardLayout>
   );
 };
