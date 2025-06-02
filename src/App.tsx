@@ -20,6 +20,7 @@ const BuyerDashboard = lazy(() => import('./pages/dashboard/buyer/BuyerDashboard
 const Wallet = lazy(() => import('./pages/Wallet'));
 const Profile = lazy(() => import('./pages/Profile'));
 const Transactions = lazy(() => import('./pages/Transactions'));
+const Messages = lazy(() => import('./pages/Messages'));
 const NotFound = lazy(() => import('./pages/NotFound'));
 
 function App() {
@@ -53,47 +54,57 @@ function App() {
             </ProtectedRoute>
           } />
           
+          {/* Admin routes */}
           <Route path="dashboard/admin" element={
             <RoleBasedRoute allowedRoles={['admin']}>
               <AdminDashboard />
             </RoleBasedRoute>
           } />
-
           <Route path="dashboard/admin/users" element={
             <RoleBasedRoute allowedRoles={['admin']}>
               <Users />
             </RoleBasedRoute>
           } />
+          <Route path="dashboard/admin/transactions" element={
+            <RoleBasedRoute allowedRoles={['admin']}>
+              <Transactions />
+            </RoleBasedRoute>
+          } />
           
+          {/* Seller routes */}
           <Route path="dashboard/seller" element={
             <RoleBasedRoute allowedRoles={['seller']}>
               <SellerDashboard />
             </RoleBasedRoute>
           } />
-
           <Route path="dashboard/seller/properties" element={
             <RoleBasedRoute allowedRoles={['seller']}>
               <AllProperties />
             </RoleBasedRoute>
           } />
-
           <Route path="dashboard/seller/properties/add" element={
             <RoleBasedRoute allowedRoles={['seller']}>
               <AddProperty />
             </RoleBasedRoute>
           } />
           
+          {/* Buyer routes */}
           <Route path="dashboard/buyer" element={
             <RoleBasedRoute allowedRoles={['buyer']}>
               <BuyerDashboard />
             </RoleBasedRoute>
           } />
           
+          {/* Common protected routes */}
+          <Route path="messages" element={
+            <ProtectedRoute>
+              <Messages />
+            </ProtectedRoute>
+          } />
+          
           <Route path="transactions" element={
             <ProtectedRoute>
-              <RoleBasedRoute allowedRoles={['admin', 'seller', 'buyer']}>
-                <Transactions />
-              </RoleBasedRoute>
+              <Transactions />
             </ProtectedRoute>
           } />
           
